@@ -1,5 +1,6 @@
 # Type imports
 from typing import List, Optional
+import json
 
 # Pydantic imports
 from pydantic import BaseModel, Field
@@ -59,6 +60,19 @@ class StructuredCategorizationAPIResponse(BaseAPIResponse):
     data: Optional[StructuredCategorizationAIResponse] = Field(description="The data of the response")
 
 
+# -------------------------------------------------------------------------------- #
+# Lambda Response
+# -------------------------------------------------------------------------------- #
+
+
+def lambda_response(status_code: int, body: dict):
+    """Helper to format responses for API Gateway."""
+    return {
+        "statusCode": status_code,
+        "headers": {"Content-Type": "application/json"},
+        "body": json.dumps(body),
+    }
+    
 # -------------------------------------------------------------------------------- #
 # -------------------------------------------------------------------------------- #
 # -------------------------------------------------------------------------------- #

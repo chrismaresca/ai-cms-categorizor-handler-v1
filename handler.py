@@ -21,7 +21,7 @@ from pydantic_ai.models.openai import OpenAIModel
 # Modules Imports
 from modules.utils import fetch_tags, format_system_prompt
 from modules.constants import MODEL_NAME, USER_PROMPT_TEMPLATE
-from modules.types import CategorizationAPIRequest, StructuredCategorizationAIResponse, StructuredCategorizationAPIResponse, CategorizationAIResponse, Tag
+from modules.types import CategorizationAPIRequest, StructuredCategorizationAIResponse, StructuredCategorizationAPIResponse, CategorizationAIResponse, Tag, lambda_response
 
 
 # -------------------------------------------------------------------------------- #
@@ -45,6 +45,7 @@ if not logger.hasHandlers():
 load_dotenv()
 logger.info("Loaded environment variables")
 
+
 # -------------------------------------------------------------------------------- #
 # -------------------------------------------------------------------------------- #
 # -------------------------------------------------------------------------------- #
@@ -60,7 +61,10 @@ async def categorize_content_async(event, context) -> StructuredCategorizationAP
             logger.info(f"Parsed raw request body: {body}")
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON body: {e}")
-            raise ValueError("Invalid JSON in request body")
+            raise ValueError(f"Invalid JSON in request body. Missing {', '.join(k for k in ['brandId', 'content'] if k not in body)}")
+        except Exception as e:
+            logger.error(f"Unexpected error: {e}")
+            raise ValueError(f"Unexpected error: {e}")
 
         # Validate the request body
         try:
@@ -73,11 +77,13 @@ async def categorize_content_async(event, context) -> StructuredCategorizationAP
             )
         except ValidationError as e:
             logger.error(f"Request validation failed: {e}")
-            raise ValueError("Invalid request format")
+            raise ValueError(f"Request validation failed. {e}")
 
         # Fetch tags from CMS
         try:
             tags = fetch_tags(brand_id)
+            if not tags:
+                raise ValueError("No tags found for the given brand ID")
             logger.info(f"Fetched CMS data: {tags}")
         except requests.RequestException as e:
             logger.error(f"Failed to fetch tags from CMS: {e}")
@@ -120,28 +126,46 @@ async def categorize_content_async(event, context) -> StructuredCategorizationAP
             tag_obj = Tag(id=tag.id, category=tag.category)
 
             structured_response = StructuredCategorizationAIResponse(tag=tag_obj,
-                                                                    code_present=code_present)
-            return StructuredCategorizationAPIResponse(
-                status="Success",
-                message="Content successfully categorized",
-                data=structured_response).model_dump_json(exclude_none=True)
+                                                                     code_present=code_present)
 
+            handler_response = lambda_response(
+                status_code=200,
+                body=StructuredCategorizationAPIResponse(
+                    status="Success",
+                    message="Content successfully categorized",
+                    data=structured_response,
+                ).model_dump(exclude_none=True)
+            )
+            # return handler_response
         except Exception as e:
             logger.error(f"AI processing error: {e}")
             raise ValueError("Failed to process content")
 
     except ValueError as e:
         logger.error(f"Error occurred: {e}")
-        return StructuredCategorizationAPIResponse(status="Error",
-                                         message=str(e),
-                                         data=None).model_dump_json(exclude_none=True)
+        handler_response = lambda_response(
+            status_code=400,
+            body=StructuredCategorizationAPIResponse(
+                status="Error",
+                message=str(e),
+                data=None,
+            ).model_dump(exclude_none=True),
+        )
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
-        return StructuredCategorizationAPIResponse(status="Error",
-                                         message=str(e),
-                                         data=None).model_dump_json(exclude_none=True)
+        handler_response = lambda_response(
+            status_code=500,
+            body=StructuredCategorizationAPIResponse(
+                status="Error",
+                message=str(e),
+                data=None,
+            ).model_dump(exclude_none=True),
+        )
+
+    
+    return handler_response
 
 
 def categorize(event, context):
-    loop=asyncio.get_event_loop()
+    loop = asyncio.get_event_loop()
     return loop.run_until_complete(categorize_content_async(event, context))
