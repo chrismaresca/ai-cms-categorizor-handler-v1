@@ -39,3 +39,8 @@ package-lock.json
 *.log
 *.tmp
 # End of Selection
+
+
+# Environment variables
+.env
+!.env.*.sample

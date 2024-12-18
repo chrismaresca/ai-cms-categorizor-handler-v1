@@ -1,6 +1,6 @@
 
 # "service" is the name of this project. This will also be added to your AWS resource names.
-service: test-http
+service: ai-cms-categorization-service
 
 plugins:
   - serverless-python-requirements
@@ -15,8 +15,8 @@ provider:
   runtime: python3.12
 
 functions:
-  hello:
-    handler: handler.hello
+  categorize:
+    handler: handler.categorize
     events:
       - httpApi:
           path: /
